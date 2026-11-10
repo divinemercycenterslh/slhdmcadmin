@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SLHDMC — Ward Transfer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy   : #0d2137; --blue   : #1a4a7a; --teal   : #0f8a8a;
+      --teal-lt: #e0f5f5; --green  : #27ae60; --red    : #e74c3c;
+      --amber  : #f39c12; --white  : #ffffff; --gray-1 : #f4f7fa;
+      --gray-2 : #e8edf3; --gray-3 : #b0bec5; --text   : #1a2633;
+      --text-2 : #546e7a; --radius : 12px;
+      --shadow : 0 4px 24px rgba(13,33,55,.10);
+      --font   : 'Sarabun', sans-serif; --mono: 'IBM Plex Mono', monospace;
+    }
+    body { font-family: var(--font); background: var(--gray-1); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.6; }
+
+    /* Header */
+    header { background: var(--navy); padding: 0 24px; display: flex; align-items: center; height: 60px; gap: 16px; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 32px; height: 32px; background: var(--teal); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .logo-text { font-size: 14px; font-weight: 600; color: var(--white); letter-spacing: .5px; }
+    .logo-sub  { font-size: 11px; color: var(--gray-3); font-weight: 400; margin-top: -2px; }
+    .header-title { margin-left: auto; font-size: 13px; color: var(--gray-3); font-family: var(--mono); }
+
+    /* Layout */
+    main { max-width: 860px; margin: 32px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* Card */
+    .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .card-header { background: var(--blue); color: var(--white); padding: 14px 20px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .card-body { padding: 20px; }
+
+    /* Search */
+    .search-row { display: flex; gap: 10px; }
+    .search-input { flex: 1; border: 2px solid var(--gray-2); border-radius: 8px; padding: 10px 14px; font-family: var(--font); font-size: 15px; color: var(--text); outline: none; transition: border-color .2s; }
+    .search-input:focus { border-color: var(--teal); }
+
+    /* Buttons */
+    .btn { border: none; cursor: pointer; font-family: var(--font); font-size: 14px; font-weight: 600; border-radius: 8px; padding: 10px 20px; transition: opacity .15s, transform .1s; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--teal);    color: var(--white); }
+    .btn-success { background: var(--green);   color: var(--white); }
+    .btn-ghost   { background: var(--gray-2);  color: var(--text); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Patient list */
+    .patient-list { display: flex; flex-direction: column; gap: 10px; }
+    .patient-card { border: 2px solid var(--gray-2); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: border-color .2s, background .2s; display: flex; align-items: center; gap: 14px; }
+    .patient-card:hover, .patient-card.selected { border-color: var(--teal); background: var(--teal-lt); }
+    .patient-info { flex: 1; min-width: 0; }
+    .patient-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+
+    /* Badges */
+    .ward-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+    .ward-badge.current { background: var(--teal);  color: var(--white); }
+    .ward-badge.initial { background: var(--gray-2); color: var(--text-2); }
+    .status-badge { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .status-badge.done   { background: #eafaf1; color: var(--green); border: 1px solid #a9dfbf; }
+    .status-badge.pending{ background: #fef9e7; color: var(--amber); border: 1px solid #f9e79f; }
+
+    /* Banner */
+    .selected-patient-banner { background: var(--navy); color: var(--white); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .banner-name { font-weight: 600; font-size: 15px; }
+    .banner-meta { font-size: 12px; color: var(--gray-3); }
+    .patient-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--teal); color: var(--white); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; font-family: var(--mono); flex-shrink: 0; }
+
+    /* Form */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full { grid-column: 1 / -1; }
+    label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+    select, input[type="text"], input[type="date"], textarea {
+      border: 2px solid var(--gray-2); border-radius: 8px; padding: 10px 12px;
+      font-family: var(--font); font-size: 15px; color: var(--text);
+      outline: none; transition: border-color .2s; width: 100%;
+    }
+    select:focus, input:focus, textarea:focus { border-color: var(--teal); }
+    textarea { resize: vertical; min-height: 72px; }
+    .readonly-field { background: var(--gray-1); color: var(--text-2); }
+
+    /* Option Buttons (Yes/No style) */
+    .opt-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .opt-btn {
+      padding: 7px 16px; border-radius: 6px; border: 2px solid var(--gray-2);
+      background: var(--white); cursor: pointer; font-size: 13px; font-weight: 500;
+      font-family: var(--font); color: var(--text); transition: all .15s;
+    }
+    .opt-btn:hover   { border-color: var(--teal); }
+    .opt-btn.selected{ border-color: var(--teal); background: var(--teal-lt); color: var(--teal); font-weight: 700; }
+    .opt-btn:disabled{ opacity: .6; cursor: default; }
+
+    /* Section divider */
+    .section-title {
+      font-size: 12px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+      color: var(--text-2); border-bottom: 2px solid var(--gray-2);
+      padding-bottom: 6px; margin: 20px 0 14px; grid-column: 1 / -1;
+    }
+
+    /* Filled notice */
+    .filled-notice {
+      display: flex; align-items: center; gap: 10px;
+      background: #eafaf1; border: 1px solid #a9dfbf; border-radius: 8px;
+      padding: 12px 16px; margin-bottom: 16px; color: var(--green); font-weight: 600; font-size: 13px;
+    }
+
+    /* Log table */
+    .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .log-table th { background: var(--gray-1); padding: 8px 12px; text-align: left; font-weight: 600; color: var(--text-2); border-bottom: 2px solid var(--gray-2); }
+    .log-table td { padding: 10px 12px; border-bottom: 1px solid var(--gray-2); vertical-align: middle; }
+    .log-table tr:last-child td { border-bottom: none; }
+    .log-table .arrow { color: var(--teal); font-weight: 700; }
+
+    /* States */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-2); }
+    .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 14px; }
+    .alert { border-radius: 8px; padding: 12px 16px; font-size: 14px; font-weight: 500; margin-top: 12px; }
+    .alert-success { background: #eafaf1; color: var(--green); border: 1px solid #a9dfbf; }
+    .alert-error   { background: #fdf3f2; color: var(--red);   border: 1px solid #f5b7b1; }
+    .loading { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 14px; padding: 20px 0; }
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--gray-2); border-top-color: var(--teal); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 2px; background: var(--gray-1); border-radius: 10px; padding: 4px; flex-wrap: wrap; }
+    .tab-btn { flex: 1; min-width: 80px; padding: 8px 6px; border: none; cursor: pointer; border-radius: 7px; font-family: var(--font); font-size: 13px; font-weight: 500; background: transparent; color: var(--text-2); transition: all .2s; white-space: nowrap; }
+    .tab-btn.active { background: var(--white); color: var(--teal); box-shadow: 0 1px 6px rgba(0,0,0,.08); font-weight: 600; }
+
+    /* PIN */
+    #pinScreen { position: fixed; inset: 0; background: var(--navy); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .pin-box { background: var(--white); border-radius: 16px; padding: 36px 32px; width: 320px; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.3); }
+    .pin-logo  { font-size: 36px; margin-bottom: 8px; }
+    .pin-title { font-size: 18px; font-weight: 700; color: var(--navy); }
+    .pin-sub   { font-size: 13px; color: var(--text-2); margin-bottom: 24px; margin-top: 4px; }
+    .pin-dots  { display: flex; justify-content: center; gap: 12px; margin-bottom: 20px; }
+    .pin-dot   { width: 14px; height: 14px; border-radius: 50%; background: var(--gray-2); transition: background .2s; }
+    .pin-dot.filled { background: var(--teal); }
+    .pin-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .pin-key   { border: 2px solid var(--gray-2); border-radius: 10px; padding: 14px; font-size: 18px; font-weight: 600; cursor: pointer; background: var(--white); color: var(--text); font-family: var(--mono); transition: all .15s; }
+    .pin-key:hover  { border-color: var(--teal); background: var(--teal-lt); }
+    .pin-key:active { transform: scale(.93); }
+    .pin-key.del    { font-size: 15px; color: var(--text-2); }
+    .pin-error { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 18px; }
+  </style>
+</head>
+<body>
+
+<!-- PIN Screen -->
+<div id="pinScreen">
+  <div class="pin-box">
+    <div class="pin-logo">🔐</div>
+    <div class="pin-title">SLHDMC</div>
+    <div class="pin-sub">Palliative Care Team<br>กรุณาใส่ PIN 6 หลัก</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="d0"></div><div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div><div class="pin-dot" id="d3"></div>
+      <div class="pin-dot" id="d4"></div><div class="pin-dot" id="d5"></div>
+    </div>
+    <div class="pin-grid">
+      <button class="pin-key" onclick="pinPress('1')">1</button>
+      <button class="pin-key" onclick="pinPress('2')">2</button>
+      <button class="pin-key" onclick="pinPress('3')">3</button>
+      <button class="pin-key" onclick="pinPress('4')">4</button>
+      <button class="pin-key" onclick="pinPress('5')">5</button>
+      <button class="pin-key" onclick="pinPress('6')">6</button>
+      <button class="pin-key" onclick="pinPress('7')">7</button>
+      <button class="pin-key" onclick="pinPress('8')">8</button>
+      <button class="pin-key" onclick="pinPress('9')">9</button>
+      <button class="pin-key del" onclick="pinClear()" style="grid-column:1">ล้าง</button>
+      <button class="pin-key" onclick="pinPress('0')">0</button>
+      <button class="pin-key del" onclick="pinBack()">⌫</button>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏥</div>
+    <div>
+      <div class="logo-text">SLHDMC</div>
+      <div class="logo-sub">Palliative Care Team</div>
+    </div>
+  </div>
+  <div class="header-title">SLHDMC Support System</div>
+</header>
+
+<main>
+  <!-- Search Card -->
+  <div class="card">
+    <div class="card-header">🔍 ค้นหาผู้ป่วยด้วย AN</div>
+    <div class="card-body">
+      <div class="search-row">
+        <input class="search-input" id="searchInput" type="text"
+          placeholder="พิมพ์เลข AN (ไม่ต้องใส่ -) แล้วกด Enter..." autocomplete="off" inputmode="numeric" />
+        <button class="btn btn-primary" id="searchBtn" onclick="doSearch()">ค้นหา</button>
+      </div>
+      <div id="searchResults"></div>
+    </div>
+  </div>
+
+  <!-- Action Card -->
+  <div class="card" id="actionCard" style="display:none">
+    <div class="card-header">📋 จัดการผู้ป่วย</div>
+    <div class="card-body">
+
+      <div class="tabs" style="margin-bottom:20px">
+        <button class="tab-btn active" id="tab3" onclick="switchTab(3)">📊 KPI</button>
+        <button class="tab-btn"        id="tab4" onclick="switchTab(4)">📅 1 เดือน</button>
+        <button class="tab-btn"        id="tab1" onclick="switchTab(1)">🔄 ย้าย Ward</button>
+        <button class="tab-btn"        id="tab2" onclick="switchTab(2)">📜 ประวัติ</button>
+      </div>
+
+      <!-- Tab 1: Ward Transfer -->
+      <div id="tabContent1">
+        <div class="selected-patient-banner" id="patientBanner"></div>
+        <div id="wardLockNotice" class="filled-notice" style="display:none; background:#fef9e7; border-color:#f9e79f; color:#b9770e">🔒 ผู้ป่วยรายนี้ลง KPI (จำหน่าย) แล้ว — ไม่สามารถย้าย ward ได้</div>
+        <div class="form-grid" id="wardFormGrid">
+          <div class="form-group">
+            <label>Ward ปัจจุบัน</label>
+            <input type="text" id="currentWardDisplay" readonly class="readonly-field" />
+          </div>
+          <div class="form-group">
+            <label>ย้ายไป Ward ใหม่ *</label>
+            <select id="newWardSelect">
+              <option value="">-- เลือก Ward --</option>
+              <option>ICU</option><option>CCU</option>
+              <option>10</option><option>11</option><option>12</option><option>14</option>
+              <option>15</option><option>16</option><option>17</option><option>18</option>
+              <option>24</option>
+              <option>ไตเทียม</option>
+              <option>สิริอายุ 3A</option><option>สิริอายุ 3B</option>
+              <option>สิริอายุ 5A</option><option>สิริอายุ 5B</option>
+              <option>สิริอายุ 6A</option><option>สิริอายุ 6B</option>
+              <option value="อื่นๆ">อื่นๆ (กรอกเอง)</option>
+            </select>
+          </div>
+          <div class="form-group" id="customWardGroup" style="display:none">
+            <label>ระบุ Ward</label>
+            <input type="text" id="customWard" placeholder="เช่น ER, OPD..." />
+          </div>
+          <div class="form-group">
+            <label>บันทึกโดย *</label>
+            <input type="text" id="updatedByInput" placeholder="ชื่อผู้บันทึก" />
+          </div>
+        </div>
+        <div style="margin-top:16px; display:flex; gap:10px">
+          <button class="btn btn-success" id="saveBtn" onclick="saveWard()">💾 บันทึกการย้าย Ward</button>
+          <button class="btn btn-ghost" onclick="clearSelection()">ยกเลิก</button>
+        </div>
+        <div id="saveAlert"></div>
+      </div>
+
+      <!-- Tab 2: Transfer Log -->
+      <div id="tabContent2" style="display:none">
+        <div id="logContent"></div>
+      </div>
+
+      <!-- Tab 3: KPI Form -->
+      <div id="tabContent3" style="display:none">
+        <div id="kpiFilled" style="display:none" class="filled-notice">✅ กรอก KPI สำหรับ AN นี้แล้ว</div>
+        <div class="form-grid" id="kpiForm">
+          <div class="section-title">ข้อมูลทั่วไป</div>
+
+          <div class="form-group">
+            <label>Ward dc (ward ที่จำหน่าย)</label>
+            <select id="kpi_wardDc">
+              <option value="">-- เลือก Ward --</option>
+              <option>ICU</option><option>CCU</option>
+              <option>10</option><option>11</option><option>12</option><option>14</option>
+              <option>15</option><option>16</option><option>17</option><option>18</option>
+              <option>24</option>
+              <option>ไตเทียม</option>
+              <option>สิริอายุ 3A</option><option>สิริอายุ 3B</option>
+              <option>สิริอายุ 5A</option><option>สิริอายุ 5B</option>
+              <option>สิริอายุ 6A</option><option>สิริอายุ 6B</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>วันที่จำหน่าย</label>
+            <input type="date" id="kpi_dischargeDate" />
+          </div>
+
+          <div class="form-group full">
+            <label>สถานะผู้ป่วยหลังจำหน่าย</label>
+            <div class="opt-group" data-field="kpi_status">
+              <button class="opt-btn" data-value="Discharge" onclick="optSelect(this)">Discharge</button>
+              <button class="opt-btn" data-value="Death"     onclick="optSelect(this)">Death</button>
+            </div>
+          </div>
+
+          <div class="section-title">KPI</div>
+
+          <div class="form-group full">
+            <label>KPI 2. ผู้ป่วย PC ได้รับการทำ ACP/FC</label>
+            <div class="opt-group" data-field="kpi2">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>KPI 3. ผู้ป่วย PC ได้รับการดูแลตาม ACP</label>
+            <div class="opt-group" data-field="kpi3">
+              <button class="opt-btn" data-value="Yes"                       onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"                        onclick="optSelect(this)">No</button>
+              <button class="opt-btn" data-value="ไม่มี/ยังไม่ได้ทำ ACP"    onclick="optSelect(this)">ไม่มี/ยังไม่ได้ทำ ACP</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>KPI 4. ผู้ป่วย PC ได้รับการดูแลด้านจิตใจ/จิตวิญญาณ</label>
+            <div class="opt-group" data-field="kpi4">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>KPI 5. ผู้ป่วย PC ได้รับการประเมิน ESAS ทุกวัน</label>
+            <div class="opt-group" data-field="kpi5">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>KPI 6. ผู้ป่วยได้รับ consult แพทย์ PC และการรบกวนลดลง &gt;3 คะแนน (ESAS)</label>
+            <div class="opt-group" data-field="kpi6">
+              <button class="opt-btn" data-value="Yes"                    onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"                     onclick="optSelect(this)">No</button>
+              <button class="opt-btn" data-value="ESAS ไม่เกิน 3 ตั้งแต่แรก" onclick="optSelect(this)">ESAS ไม่เกิน 3 ตั้งแต่แรก</button>
+              <button class="opt-btn" data-value="ไม่ได้ consult"         onclick="optSelect(this)">ไม่ได้ consult</button>
+            </div>
+          </div>
+
+          <div class="section-title">หัวข้อการบันทึกเวชระเบียน</div>
+
+          <div class="form-group full">
+            <label>1. ติดสัญลักษณ์ดาวเหลือง (case EOL เซ็นใบ NR ครบ)</label>
+            <div class="opt-group" data-field="mr1">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>2. ป้อนรหัส Z515 ลง diagnosis ในระบบคอมพิวเตอร์</label>
+            <div class="opt-group" data-field="mr2">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>3. มี Focus List - การจัดการอาการรบกวนต่างๆ (ESAS)</label>
+            <div class="opt-group" data-field="mr3">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>4. มี Focus List - การดูแลด้านจิตใจ/จิตวิญญาณ (Spiritual)</label>
+            <div class="opt-group" data-field="mr4">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>5. มี Focus List - การเตรียมความพร้อมญาติต่อการสูญเสีย (actively dying)<br><span style="font-weight:400;color:var(--text-2);font-size:12px">หากผู้ป่วยไม่ใกล้เสียชีวิต ตอบ N/A</span></label>
+            <div class="opt-group" data-field="mr5">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+              <button class="opt-btn" data-value="N/A" onclick="optSelect(this)">N/A</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>6. มี Focus List - การดูแลผู้ป่วยระยะใกล้เสียชีวิต (actively dying)<br><span style="font-weight:400;color:var(--text-2);font-size:12px">หากผู้ป่วยไม่ใกล้เสียชีวิต ตอบ N/A</span></label>
+            <div class="opt-group" data-field="mr6">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this)">No</button>
+              <button class="opt-btn" data-value="N/A" onclick="optSelect(this)">N/A</button>
+            </div>
+          </div>
+
+          <div class="form-group full" style="margin-top:4px; display:flex; gap:10px">
+            <button class="btn btn-success" id="kpiSubmitBtn" onclick="submitKPIForm()">💾 บันทึก KPI</button>
+          </div>
+          <div id="kpiAlert" style="grid-column:1/-1"></div>
+        </div>
+      </div>
+
+      <!-- Tab 4: 1mo. Form -->
+      <div id="tabContent4" style="display:none">
+        <div id="oneMoFilled" style="display:none" class="filled-notice">✅ ประเมินความพึงพอใจแล้ว — ข้อมูล 1mo. รวม BGQ ถูกล็อก (แก้ไขไม่ได้)</div>
+        <div class="form-grid" id="oneMoForm">
+          <div class="section-title">ข้อมูลทั่วไปและการประเมินความพึงพอใจ</div>
+
+          <div class="form-group">
+            <label>Ward dc (ward ที่จำหน่าย)</label>
+            <select id="mo_wardDc">
+              <option value="">-- เลือก Ward --</option>
+              <option>ICU</option><option>CCU</option>
+              <option>10</option><option>11</option><option>12</option><option>14</option>
+              <option>15</option><option>16</option><option>17</option><option>18</option>
+              <option>24</option>
+              <option>ไตเทียม</option>
+              <option>สิริอายุ 3A</option><option>สิริอายุ 3B</option>
+              <option>สิริอายุ 5A</option><option>สิริอายุ 5B</option>
+              <option>สิริอายุ 6A</option><option>สิริอายุ 6B</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>สถานะผู้ป่วยหลังจำหน่าย</label>
+            <div class="opt-group" data-field="mo_status">
+              <button class="opt-btn" data-value="Discharge"                    onclick="optSelect(this)">Discharge</button>
+              <button class="opt-btn" data-value="Death"                        onclick="optSelect(this)">Death</button>
+              <button class="opt-btn" data-value="มี Readmission ไม่ต้องตาม"   onclick="optSelect(this)">Readmission</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>ประเมินความพึงพอใจโดยรวม (1 = น้อยสุด, 5 = มากสุด)</label>
+            <div class="opt-group" data-field="mo_satisfaction">
+              <button class="opt-btn" data-value="1" onclick="optSelect(this)">1</button>
+              <button class="opt-btn" data-value="2" onclick="optSelect(this)">2</button>
+              <button class="opt-btn" data-value="3" onclick="optSelect(this)">3</button>
+              <button class="opt-btn" data-value="4" onclick="optSelect(this)">4</button>
+              <button class="opt-btn" data-value="5" onclick="optSelect(this)">5</button>
+              <button class="opt-btn" data-value="ติดตามไม่ได้/ประเมินไม่ได้" onclick="optSelect(this)">ติดตามไม่ได้</button>
+            </div>
+          </div>
+
+          <div class="form-group full">
+            <label>ข้อเสนอแนะ / หมายเหตุ</label>
+            <textarea id="mo_satisNote" placeholder="(ไม่บังคับ)"></textarea>
+          </div>
+
+          <div class="section-title">การติดตาม Grief</div>
+
+          <div class="form-group full">
+            <label>ได้รับการประเมิน BGQ หลังผู้ป่วยเสียชีวิต 1 เดือน</label>
+            <div class="opt-group" data-field="mo_bgqReceived">
+              <button class="opt-btn" data-value="Yes" onclick="optSelect(this); toggleBGQ(true)">Yes</button>
+              <button class="opt-btn" data-value="No"  onclick="optSelect(this); toggleBGQ(false)">No</button>
+            </div>
+          </div>
+
+          <div class="form-group" id="bgqScoreGroup" style="display:none">
+            <label>คะแนน BGQ ที่ได้</label>
+            <select id="mo_bgqScore">
+              <option value="">-- เลือกคะแนน --</option>
+              <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option>
+              <option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+            </select>
+          </div>
+
+          <div class="form-group full">
+            <label>หมายเหตุ (BGQ)</label>
+            <textarea id="mo_bgqNote" placeholder="(ไม่บังคับ)"></textarea>
+          </div>
+
+          <div class="form-group full" style="display:flex; gap:10px">
+            <button class="btn btn-success" id="oneMoSubmitBtn" onclick="submitOneMoForm()">💾 บันทึก 1mo.</button>
+          </div>
+          <div id="oneMoAlert" style="grid-column:1/-1"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<script>
+  // ── CONFIG ────────────────────────────────────────
+  const API_URL     = 'https://script.google.com/macros/s/AKfycbzr4XhlIm-RFusc4W0D3I2FkkOAVc0mHK-YY925T5EnEKEe7bsisVO-rGd8NSwZ53OAhg/exec';
+  const ORIGIN      = window.location.origin;
+  const CORRECT_PIN = '123456'; // ← เปลี่ยน PIN ที่นี่
+
+  // ── PIN ───────────────────────────────────────────
+  let pinValue = '';
+  function pinPress(d) { if (pinValue.length >= 6) return; pinValue += d; updateDots(); if (pinValue.length === 6) checkPin(); }
+  function pinBack()  { pinValue = pinValue.slice(0, -1); updateDots(); }
+  function pinClear() { pinValue = ''; updateDots(); document.getElementById('pinError').textContent = ''; }
+  function updateDots() { for (let i = 0; i < 6; i++) document.getElementById(`d${i}`).classList.toggle('filled', i < pinValue.length); }
+  function checkPin() {
+    if (pinValue === CORRECT_PIN) { document.getElementById('pinScreen').style.display = 'none'; }
+    else { document.getElementById('pinError').textContent = 'PIN ไม่ถูกต้อง กรุณาลองใหม่'; pinValue = ''; updateDots(); }
+  }
+  document.addEventListener('keydown', e => {
+    if (document.getElementById('pinScreen').style.display === 'none') return;
+    if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+    else if (e.key === 'Backspace') pinBack();
+    else if (e.key === 'Escape') pinClear();
+  });
+
+  // ── API helper ────────────────────────────────────
+  function apiUrl(params) { params.origin = ORIGIN; return `${API_URL}?${new URLSearchParams(params)}`; }
+
+  // ── Search ────────────────────────────────────────
+  let selectedPatient = null;
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  async function doSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    const el = document.getElementById('searchResults');
+    el.innerHTML = `<div class="loading"><div class="spinner"></div>กำลังค้นหา...</div>`;
+    document.getElementById('searchBtn').disabled = true;
+    try {
+      const res  = await fetch(apiUrl({ action: 'search', q }));
+      const data = await res.json();
+      if (!data.success) { el.innerHTML = `<div class="alert alert-error" style="margin-top:12px">⚠️ ${data.message}</div>`; return; }
+      if (data.count === 0) { el.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><p>ไม่พบผู้ป่วย AN "<strong>${q}</strong>"</p></div>`; return; }
+      renderPatientList(data.patients);
+    } catch (err) {
+      el.innerHTML = `<div class="alert alert-error" style="margin-top:12px">❌ เชื่อมต่อ API ไม่ได้: ${err.message}</div>`;
+    } finally { document.getElementById('searchBtn').disabled = false; }
+  }
+
+  function renderPatientList(patients) {
+    const html = patients.map(p => {
+      const wardNow   = p.currentWard || p.wardInitial || '-';
+      const isUpdated = !!p.currentWard;
+      return `
+        <div class="patient-card" id="pc-${p.an}" onclick="selectPatient(${JSON.stringify(p).replace(/"/g,'&quot;')})">
+          <div class="patient-info">
+            <div style="font-family:var(--mono); font-weight:600">AN: ${p.an}</div>
+            <div class="patient-tags">
+              <span class="ward-badge ${isUpdated?'current':'initial'}">${isUpdated?'📍':'🏥'} ${wardNow}</span>
+              <span class="status-badge ${p.kpiFilled?'done':'pending'}">${p.kpiFilled?'✓ KPI':'○ KPI'}</span>
+              <span class="status-badge ${p.oneMoFilled?'done':'pending'}">${p.oneMoFilled?'✓ 1mo.':'○ 1mo.'}</span>
+            </div>
+            ${isUpdated ? `<div style="font-size:11px;color:var(--text-2);margin-top:4px">อัปเดต ${p.updatedAt} โดย ${p.updatedBy}</div>` : ''}
+          </div>
+        </div>`;
+    }).join('');
+    document.getElementById('searchResults').innerHTML = `<div class="patient-list" style="margin-top:14px">${html}</div>`;
+  }
+
+  function selectPatient(p) {
+    selectedPatient = p;
+    document.querySelectorAll('.patient-card').forEach(c => c.classList.remove('selected'));
+    const card = document.getElementById(`pc-${p.an}`);
+    if (card) card.classList.add('selected');
+
+    const wardNow = p.currentWard || p.wardInitial || '-';
+    document.getElementById('patientBanner').innerHTML = `
+      <div class="patient-avatar">AN</div>
+      <div><div class="banner-name" style="font-family:var(--mono)">${p.an}</div>
+      <div class="banner-meta">Ward ปัจจุบัน: ${wardNow}</div></div>`;
+
+    document.getElementById('currentWardDisplay').value = wardNow;
+    document.getElementById('newWardSelect').value = '';
+    document.getElementById('customWard').value = '';
+    document.getElementById('saveAlert').innerHTML = '';
+    document.getElementById('actionCard').style.display = '';
+    document.getElementById('actionCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    applyWardLock(p);   // lock การย้าย ward ถ้าลง KPI แล้ว
+    switchTab(3);       // เปิดที่ KPI เป็น default
+  }
+
+  // ★ ถ้าลง KPI แล้ว (จำหน่ายแล้ว) ห้ามย้าย ward — disable form + ขึ้นข้อความ
+  function applyWardLock(p) {
+    const locked = !!p.kpiFilled;
+    document.getElementById('newWardSelect').disabled = locked;
+    document.getElementById('customWard').disabled    = locked;
+    document.getElementById('updatedByInput').disabled = locked;
+    document.getElementById('saveBtn').disabled        = locked;
+    document.getElementById('wardLockNotice').style.display = locked ? '' : 'none';
+    document.getElementById('wardFormGrid').style.opacity  = locked ? '.5' : '1';
+  }
+
+  function clearSelection() {
+    selectedPatient = null;
+    document.getElementById('actionCard').style.display = 'none';
+    document.querySelectorAll('.patient-card').forEach(c => c.classList.remove('selected'));
+  }
+
+  // ── Ward Transfer ─────────────────────────────────
+  document.getElementById('newWardSelect').addEventListener('change', function() {
+    document.getElementById('customWardGroup').style.display = this.value === 'อื่นๆ' ? '' : 'none';
+  });
+
+  async function saveWard() {
+    if (!selectedPatient) return;
+    let newWard = document.getElementById('newWardSelect').value;
+    if (newWard === 'อื่นๆ') newWard = document.getElementById('customWard').value.trim();
+    const updatedBy = document.getElementById('updatedByInput').value.trim();
+    if (!newWard)   return showAlert('saveAlert', 'กรุณาเลือก Ward ที่ต้องการย้ายไป', 'error');
+    if (!updatedBy) return showAlert('saveAlert', 'กรุณาระบุชื่อผู้บันทึก', 'error');
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+    try {
+      const res  = await fetch(apiUrl({ action:'update', hn:selectedPatient.hn, an:selectedPatient.an, newWard, updatedBy }));
+      const data = await res.json();
+      if (data.success) {
+        showAlert('saveAlert', `✅ ${data.message}`, 'success');
+        selectedPatient.currentWard = newWard;
+        document.getElementById('currentWardDisplay').value = newWard;
+        doSearch();
+      } else { showAlert('saveAlert', `⚠️ ${data.message}`, 'error'); }
+    } catch { showAlert('saveAlert', '❌ เชื่อมต่อ API ไม่ได้', 'error'); }
+    finally { btn.disabled = false; btn.textContent = '💾 บันทึกการย้าย Ward'; }
+  }
+
+  // ── Transfer Log ──────────────────────────────────
+  async function loadLog() {
+    if (!selectedPatient) return;
+    const el = document.getElementById('logContent');
+    el.innerHTML = `<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>`;
+    try {
+      const res  = await fetch(apiUrl({ action:'log', an:selectedPatient.an }));
+      const data = await res.json();
+      if (!data.logs || data.logs.length === 0) { el.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>ยังไม่มีประวัติการย้าย Ward</p></div>`; return; }
+      const rows = data.logs.map(l => `<tr><td>${l.datetime}</td><td>${l.fromWard||'-'}</td><td class="arrow">→</td><td><strong>${l.toWard}</strong></td><td>${l.updatedBy}</td></tr>`).join('');
+      el.innerHTML = `<table class="log-table"><thead><tr><th>วันเวลา</th><th>จาก Ward</th><th></th><th>ไป Ward</th><th>บันทึกโดย</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } catch { el.innerHTML = `<div class="alert alert-error">❌ โหลดประวัติไม่ได้</div>`; }
+  }
+
+  // ── KPI Form ──────────────────────────────────────
+  async function loadKPIForm() {
+    if (!selectedPatient) return;
+    try {
+      const res  = await fetch(apiUrl({ action:'getFormData', an:selectedPatient.an, form:'kpi' }));
+      const data = await res.json();
+      if (!data.success) return;
+      if (data.filled) {
+        document.getElementById('kpiFilled').style.display = '';
+        setFormDisabled('kpiForm', true);
+        document.getElementById('kpiSubmitBtn').style.display = 'none';
+        // แสดงข้อมูลที่กรอกไปแล้ว
+        const d = data.data;
+        setSelect('kpi_wardDc', d.wardDc);
+        document.getElementById('kpi_dischargeDate').value = d.dischargeDate || '';
+        setOpt('kpi_status', d.status);
+        setOpt('kpi2', d.kpi2); setOpt('kpi3', d.kpi3);
+        setOpt('kpi4', d.kpi4); setOpt('kpi5', d.kpi5); setOpt('kpi6', d.kpi6);
+        setOpt('mr1', d.mr1); setOpt('mr2', d.mr2); setOpt('mr3', d.mr3);
+        setOpt('mr4', d.mr4); setOpt('mr5', d.mr5); setOpt('mr6', d.mr6);
+      } else {
+        document.getElementById('kpiFilled').style.display = 'none';
+        setFormDisabled('kpiForm', false);
+        document.getElementById('kpiSubmitBtn').style.display = '';
+      }
+    } catch { /* silent fail */ }
+  }
+
+  async function submitKPIForm() {
+    if (!selectedPatient) return;
+    const wardDc        = document.getElementById('kpi_wardDc').value;
+    const dischargeDate = document.getElementById('kpi_dischargeDate').value;
+    const status        = getOpt('kpi_status');
+    const kpi2 = getOpt('kpi2'); const kpi3 = getOpt('kpi3');
+    const kpi4 = getOpt('kpi4'); const kpi5 = getOpt('kpi5'); const kpi6 = getOpt('kpi6');
+    const mr1 = getOpt('mr1'); const mr2 = getOpt('mr2'); const mr3 = getOpt('mr3');
+    const mr4 = getOpt('mr4'); const mr5 = getOpt('mr5'); const mr6 = getOpt('mr6');
+    if (!wardDc)        return showAlert('kpiAlert', 'กรุณาเลือก Ward dc', 'error');
+    if (!dischargeDate) return showAlert('kpiAlert', 'กรุณาระบุวันที่จำหน่าย', 'error');
+    if (!status)        return showAlert('kpiAlert', 'กรุณาเลือกสถานะผู้ป่วย', 'error');
+    if (!kpi2||!kpi3||!kpi4||!kpi5||!kpi6) return showAlert('kpiAlert', 'กรุณาตอบ KPI ให้ครบทุกข้อ', 'error');
+    if (!mr1||!mr2||!mr3||!mr4||!mr5||!mr6) return showAlert('kpiAlert', 'กรุณาตอบหัวข้อการบันทึกเวชระเบียนให้ครบทุกข้อ', 'error');
+    const btn = document.getElementById('kpiSubmitBtn');
+    btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+    try {
+      const res  = await fetch(apiUrl({ action:'submitKPI', an:selectedPatient.an, wardDc, dischargeDate, status, kpi2, kpi3, kpi4, kpi5, kpi6, mr1, mr2, mr3, mr4, mr5, mr6 }));
+      const data = await res.json();
+      if (data.success) {
+        showAlert('kpiAlert', `✅ ${data.message}`, 'success');
+        selectedPatient.kpiFilled = true;
+        document.getElementById('kpiFilled').style.display = '';
+        setFormDisabled('kpiForm', true);
+        btn.style.display = 'none';
+        doSearch();
+      } else { showAlert('kpiAlert', `⚠️ ${data.message}`, 'error'); }
+    } catch { showAlert('kpiAlert', '❌ เชื่อมต่อ API ไม่ได้', 'error'); }
+    finally { btn.disabled = false; btn.textContent = '💾 บันทึก KPI'; }
+  }
+
+  // ── 1mo. Form ─────────────────────────────────────
+  async function loadOneMoForm() {
+    if (!selectedPatient) return;
+    try {
+      const res  = await fetch(apiUrl({ action:'getFormData', an:selectedPatient.an, form:'1mo' }));
+      const data = await res.json();
+      if (!data.success) return;
+      if (data.filled) {
+        document.getElementById('oneMoFilled').style.display = '';
+        setFormDisabled('oneMoForm', true);
+        document.getElementById('oneMoSubmitBtn').style.display = 'none';
+        const d = data.data;
+        setSelect('mo_wardDc', d.wardDc);
+        setOpt('mo_status', d.status);
+        setOpt('mo_satisfaction', String(d.satisfaction));
+        document.getElementById('mo_satisNote').value = d.satisNote || '';
+        setOpt('mo_bgqReceived', d.bgqReceived);
+        if (d.bgqReceived === 'Yes') { toggleBGQ(true); setSelect('mo_bgqScore', String(d.bgqScore)); }
+        document.getElementById('mo_bgqNote').value = d.bgqNote || '';
+      } else {
+        document.getElementById('oneMoFilled').style.display = 'none';
+        setFormDisabled('oneMoForm', false);
+        document.getElementById('oneMoSubmitBtn').style.display = '';
+      }
+    } catch { /* silent fail */ }
+  }
+
+  async function submitOneMoForm() {
+    if (!selectedPatient) return;
+    const wardDc       = document.getElementById('mo_wardDc').value;
+    const status       = getOpt('mo_status');
+    const satisfaction = getOpt('mo_satisfaction');
+    const satisNote    = document.getElementById('mo_satisNote').value.trim();
+    const bgqReceived  = getOpt('mo_bgqReceived');
+    const bgqScore     = document.getElementById('mo_bgqScore').value;
+    const bgqNote      = document.getElementById('mo_bgqNote').value.trim();
+    if (!wardDc)       return showAlert('oneMoAlert', 'กรุณาเลือก Ward dc', 'error');
+    if (!status)       return showAlert('oneMoAlert', 'กรุณาเลือกสถานะผู้ป่วย', 'error');
+    if (!satisfaction) return showAlert('oneMoAlert', 'กรุณาประเมินความพึงพอใจ', 'error');
+    if (!bgqReceived)  return showAlert('oneMoAlert', 'กรุณาตอบการประเมิน BGQ', 'error');
+    if (bgqReceived === 'Yes' && !bgqScore) return showAlert('oneMoAlert', 'กรุณาระบุคะแนน BGQ', 'error');
+    const btn = document.getElementById('oneMoSubmitBtn');
+    btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+    try {
+      const res  = await fetch(apiUrl({ action:'submitOneMo', an:selectedPatient.an, wardDc, status, satisfaction, satisNote, bgqReceived, bgqScore, bgqNote }));
+      const data = await res.json();
+      if (data.success) {
+        showAlert('oneMoAlert', `✅ ${data.message}`, 'success');
+        selectedPatient.oneMoFilled = true;
+        document.getElementById('oneMoFilled').style.display = '';
+        setFormDisabled('oneMoForm', true);
+        btn.style.display = 'none';
+        doSearch();
+      } else { showAlert('oneMoAlert', `⚠️ ${data.message}`, 'error'); }
+    } catch { showAlert('oneMoAlert', '❌ เชื่อมต่อ API ไม่ได้', 'error'); }
+    finally { btn.disabled = false; btn.textContent = '💾 บันทึก 1mo.'; }
+  }
+
+  function toggleBGQ(show) {
+    document.getElementById('bgqScoreGroup').style.display = show ? '' : 'none';
+  }
+
+  // ── Tabs ──────────────────────────────────────────
+  function switchTab(n) {
+    [1,2,3,4].forEach(i => {
+      document.getElementById(`tabContent${i}`).style.display = i === n ? '' : 'none';
+      document.getElementById(`tab${i}`).classList.toggle('active', i === n);
+    });
+    if (n === 2) loadLog();
+    if (n === 3) loadKPIForm();
+    if (n === 4) loadOneMoForm();
+  }
+
+  // ── Option Button helpers ─────────────────────────
+  function optSelect(btn) {
+    btn.closest('.opt-group').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+  }
+  function getOpt(field) {
+    const g = document.querySelector(`.opt-group[data-field="${field}"]`);
+    if (!g) return '';
+    const s = g.querySelector('.opt-btn.selected');
+    return s ? s.dataset.value : '';
+  }
+  function setOpt(field, value) {
+    const g = document.querySelector(`.opt-group[data-field="${field}"]`);
+    if (!g) return;
+    g.querySelectorAll('.opt-btn').forEach(b => b.classList.toggle('selected', b.dataset.value === value));
+  }
+  function setSelect(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value || '';
+  }
+  function setFormDisabled(formId, disabled) {
+    document.querySelectorAll(`#${formId} select, #${formId} input, #${formId} textarea`).forEach(el => {
+      el.disabled = disabled;
+      if (disabled) el.classList.add('readonly-field');
+    });
+    document.querySelectorAll(`#${formId} .opt-btn`).forEach(b => b.disabled = disabled);
+  }
+
+  // ── Misc helpers ──────────────────────────────────
+  function showAlert(id, msg, type) {
+    document.getElementById(id).innerHTML = `<div class="alert alert-${type}" style="margin-top:12px">${msg}</div>`;
+  }
+</script>
+</body>
+</html>
